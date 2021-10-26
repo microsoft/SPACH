@@ -1,16 +1,109 @@
-# Project
+This repository contains Pytorch evaluation code, training code and pretrained models for the following projects:
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
++ SPACH ([A Battle of Network Structures: An Empirical Study of CNN, Transformer, and MLP](https://arxiv.org/abs/2108.13002))
++ sMLP ([Sparse MLP for Image Recognition: Is Self-Attention Really Necessary?](https://arxiv.org/abs/2109.05422))
++ ShiftViT (When Shift Operation Meets Vision Transformer: An Extremely Simple Alternative to Attention Mechanism)
 
-As the maintainer of this project, please make a few updates:
+# Main Results on ImageNet with Pretrained Models
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
 
-## Contributing
+| name              | acc@1 | #params | FLOPs | url |
+| ---               |  ---  |   ---   | ---   | --- |
+|SPACH-Conv-MS-S    | 81.6  |   44M   | 7.2G  |     |
+|SPACH-Trans-MS-S   | 82.9  |   40M   | 7.6G  |     |
+|SPACH-MLP-MS-S     | 82.1  |   46M   | 8.2G  |     |
+|SPACH-Hybrid-MS-S  | 83.7  |   63M   | 11.2G |     |
+|SPACH-Hybrid-MS-S+ | 83.9  |   63M   | 12.3G |     |
+|sMLPNet-T          | 81.9  |   24M   | 5.0G  |     |
+|sMLPNet-S          | 83.1  |   49M   | 10.3G |     |
+|sMLPNet-B          | 83.4  |   66M   | 14.0G |     |
+|Shift-T            | 81.7  |   29M   | 4.5G  |     |
+|Shift-S            | 82.8  |   50M   | 8.8G  |     |
+|Shift-B            | 83.3  |   89M   | 15.6G |     |
+
+# Usage
+
+## Install
+First, clone the repo and install requirements:
+
+```bash
+git clone https://github.com/microsoft/Spach
+pip install -r requirements.txt
+```
+
+## Data preparation
+
+Download and extract ImageNet train and val images from http://image-net.org/. 
+The directory structure is the standard layout for the torchvision [`datasets.ImageFolder`](https://pytorch.org/docs/stable/torchvision/datasets.html#imagefolder), 
+and the training and validation data is expected to be in the `train/` folder and `val/` folder respectively:
+
+```
+/path/to/imagenet/
+  train/
+    class1/
+      img1.jpeg
+    class2/
+      img2.jpeg
+  val/
+    class1/
+      img3.jpeg
+    class/2
+      img4.jpeg
+```
+
+## Evaluation
+
+To evaluate a pre-trained model on ImageNet val with a single GPU run:
+
+```bash
+python main.py --eval --resume <checkpoint> --model <model-name>--data-path <imagenet-path> 
+```
+
+For example, to evaluate the SPACH-Hybrid-MS-S model, run
+
+```bash
+python main.py --eval --resume --model spach_ms_s_patch4_224_hybrid spach_ms_s_patch4_224_hybrid.pth --data-path <imagenet-path>
+```
+
+giving
+```bash
+* Acc@1 83.658 Acc@5 96.762 loss 0.688
+```
+
+You can find all supported models in `models/registry.py.`
+
+## Training
+
+One can simply call the following script to run training process. Distributed training is recommended even on single GPU node. 
+
+```bash
+python -m torch.distributed.launch --nproc_per_node <num-of-gpus-to-use> --use_env main.py \
+--model <model-name>
+--data-path <imagenet-path>
+--output_dir <output-path>
+--dist-eval
+```
+
+# Citation
+
+```
+@article{zhao2021battle,
+  title={A Battle of Network Structures: An Empirical Study of CNN, Transformer, and MLP},
+  author={Zhao, Yucheng and Wang, Guangting and Tang, Chuanxin and Luo, Chong and Zeng, Wenjun and Zha, Zheng-Jun},
+  journal={arXiv preprint arXiv:2108.13002},
+  year={2021}
+}
+
+@article{tang2021sparse,
+  title={Sparse MLP for Image Recognition: Is Self-Attention Really Necessary?},
+  author={Tang, Chuanxin and Zhao, Yucheng and Wang, Guangting and Luo, Chong and Xie, Wenxuan and Zeng, Wenjun},
+  journal={arXiv preprint arXiv:2109.05422},
+  year={2021}
+}
+
+```
+
+# Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
 Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
@@ -24,10 +117,6 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
 contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
-## Trademarks
+# Acknowledgement
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+Our code are built on top of [DeiT](https://github.com/facebookresearch/deit). We test throughput following [Swin Transformer](https://github.com/microsoft/Swin-Transformer)
