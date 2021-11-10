@@ -3,7 +3,7 @@
  This repository incorporates material as listed below or described in the code.
  
  Component:
- main.py, loss.py, datasets.py, engine.py, util.py
+ main.py, loss.py, datasets.py, engine.py, utils.py, logger.py, samples.py
  
  Open Source License/Copyright Notice:
  MIT License
