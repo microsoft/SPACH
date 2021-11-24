@@ -9,11 +9,11 @@ This repository contains Pytorch evaluation code, training code and pretrained m
 
 | name              | acc@1 | #params | FLOPs | url |
 | ---               |  ---  |   ---   | ---   | --- |
-|SPACH-Conv-MS-S    | 81.6  |   44M   | 7.2G  |     |
-|SPACH-Trans-MS-S   | 82.9  |   40M   | 7.6G  |     |
-|SPACH-MLP-MS-S     | 82.1  |   46M   | 8.2G  |     |
-|SPACH-Hybrid-MS-S  | 83.7  |   63M   | 11.2G |     |
-|SPACH-Hybrid-MS-S+ | 83.9  |   63M   | 12.3G |     |
+|SPACH-Conv-MS-S    | 81.6  |   44M   | 7.2G  |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_conv_s.pth)     |
+|SPACH-Trans-MS-S   | 82.9  |   40M   | 7.6G  |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_trans_s.pth)     |
+|SPACH-MLP-MS-S     | 82.1  |   46M   | 8.2G  |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_mlp_s.pth)     |
+|SPACH-Hybrid-MS-S  | 83.7  |   63M   | 11.2G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s.pth)     |
+|SPACH-Hybrid-MS-S+ | 83.9  |   63M   | 12.3G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s+.pth)     |
 |sMLPNet-T          | 81.9  |   24M   | 5.0G  |     |
 |sMLPNet-S          | 83.1  |   49M   | 10.3G |     |
 |sMLPNet-B          | 83.4  |   66M   | 14.0G |     |
@@ -62,7 +62,7 @@ python main.py --eval --resume <checkpoint> --model <model-name>--data-path <ima
 For example, to evaluate the SPACH-Hybrid-MS-S model, run
 
 ```bash
-python main.py --eval --resume --model spach_ms_s_patch4_224_hybrid spach_ms_s_patch4_224_hybrid.pth --data-path <imagenet-path>
+python main.py --eval --resume --model spach_ms_s_patch4_224_hybrid spach_ms_hybrid_s.pth --data-path <imagenet-path>
 ```
 
 giving
