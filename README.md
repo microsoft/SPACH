@@ -16,7 +16,7 @@ This repository contains Pytorch evaluation code, training code and pretrained m
 |SPACH-Hybrid-MS-S+ | 83.9  |   63M   | 12.3G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s+.pth)     |
 |sMLPNet-T          | 81.9  |   24M   | 5.0G  |     |
 |sMLPNet-S          | 83.1  |   49M   | 10.3G |     |
-|sMLPNet-B          | 83.4  |   66M   | 14.0G |     |
+|sMLPNet-B          | 83.4  |   66M   | 14.0G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/smlp_b.pth)     |
 |Shift-T            | 81.7  |   29M   | 4.5G  |     |
 |Shift-S            | 82.8  |   50M   | 8.8G  |     |
 |Shift-B            | 83.3  |   89M   | 15.6G |     |
