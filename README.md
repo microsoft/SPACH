@@ -7,19 +7,20 @@ This repository contains Pytorch evaluation code, training code and pretrained m
 # Main Results on ImageNet with Pretrained Models
 
 
-| name              | acc@1 | #params | FLOPs | url |
-| ---               |  ---  |   ---   | ---   | --- |
-|SPACH-Conv-MS-S    | 81.6  |   44M   | 7.2G  |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_conv_s.pth)     |
-|SPACH-Trans-MS-S   | 82.9  |   40M   | 7.6G  |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_trans_s.pth)     |
-|SPACH-MLP-MS-S     | 82.1  |   46M   | 8.2G  |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_mlp_s.pth)     |
-|SPACH-Hybrid-MS-S  | 83.7  |   63M   | 11.2G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s.pth)     |
-|SPACH-Hybrid-MS-S+ | 83.9  |   63M   | 12.3G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s+.pth)     |
-|sMLPNet-T          | 81.9  |   24M   | 5.0G  |     |
-|sMLPNet-S          | 83.1  |   49M   | 10.3G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/smlp_s.pth)     |
-|sMLPNet-B          | 83.4  |   66M   | 14.0G |[github](https://github.com/microsoft/SPACH/releases/download/v1.0/smlp_b.pth)     |
-|Shift-T            | 81.7  |   29M   | 4.5G  |     |
-|Shift-S            | 82.8  |   50M   | 8.8G  |     |
-|Shift-B            | 83.3  |   89M   | 15.6G |     |
+| name               | acc@1 | #params | FLOPs | url                                                          |
+| ------------------ | ----- | ------- | ----- | ------------------------------------------------------------ |
+| SPACH-Conv-MS-S    | 81.6  | 44M     | 7.2G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_conv_s.pth) |
+| SPACH-Trans-MS-S   | 82.9  | 40M     | 7.6G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_trans_s.pth) |
+| SPACH-MLP-MS-S     | 82.1  | 46M     | 8.2G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_mlp_s.pth) |
+| SPACH-Hybrid-MS-S  | 83.7  | 63M     | 11.2G | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s.pth) |
+| SPACH-Hybrid-MS-S+ | 83.9  | 63M     | 12.3G | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_hybrid_s+.pth) |
+| sMLPNet-T          | 81.9  | 24M     | 5.0G  |                                                              |
+| sMLPNet-S          | 83.1  | 49M     | 10.3G | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/smlp_s.pth) |
+| sMLPNet-B          | 83.4  | 66M     | 14.0G | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/smlp_b.pth) |
+| Shift-T / light    | 79.4  | 20M     | 3.0G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/shiftvit_tiny_light.pth) |
+| Shift-T            | 81.7  | 29M     | 4.5G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/shiftvit_tiny_r2.pth) |
+| Shift-S / light    | 81.6  | 34M     | 5.7G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/shiftvit_small_light.pth) |
+| Shift-S            | 82.8  | 50M     | 8.8G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/shiftvit_small_r2.pth) |
 
 # Usage
 
