@@ -221,7 +221,7 @@ def shiftvit_r4_tiny(**kwargs):
 
 @register_model
 def shiftvit_r2_tiny(**kwargs):
-    model = ShiftViT(embed_dim=96, depths=(3, 3, 24, 4), mlp_ratio=2, drop_path_rate=0.2, n_div=12)
+    model = ShiftViT(embed_dim=96, depths=(6, 8, 18, 6), mlp_ratio=2, drop_path_rate=0.2, n_div=12)
     return model
 
 
