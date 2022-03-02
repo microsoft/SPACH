@@ -2,7 +2,12 @@ This repository contains Pytorch evaluation code, training code and pretrained m
 
 + SPACH ([A Battle of Network Structures: An Empirical Study of CNN, Transformer, and MLP](https://arxiv.org/abs/2108.13002))
 + sMLP ([Sparse MLP for Image Recognition: Is Self-Attention Really Necessary?](https://arxiv.org/abs/2109.05422))
-+ ShiftViT (When Shift Operation Meets Vision Transformer: An Extremely Simple Alternative to Attention Mechanism)
++ ShiftViT ([When Shift Operation Meets Vision Transformer: An Extremely Simple Alternative to Attention Mechanism](https://arxiv.org/abs/2201.10801))
+
+Other unofficial implementations:
+
++ ShiftViT
+  + [Keras](https://keras.io/examples/vision/shiftvit/) by [Aritra Roy Gosthipaty](https://twitter.com/ariG23498) and [Ritwik Raha](https://twitter.com/ritwik_raha)
 
 # Main Results on ImageNet with Pretrained Models
 
