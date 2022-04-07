@@ -4,11 +4,12 @@
 Train and eval functions used in main.py
 """
 import math
+from operator import mod
 import sys
 from typing import Iterable, Optional
 import time
 import logging
-
+import os 
 import torch
 
 from timm.data import Mixup
@@ -16,11 +17,11 @@ from timm.utils import accuracy, ModelEma
 
 from losses import DistillationLoss
 import utils
-
+import apex.amp
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
+                    device: torch.device, epoch: int, output_dir: str, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     set_training_mode=True, logger=logging):
     model.train(set_training_mode)
@@ -29,36 +30,41 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
-        samples = samples.to(device, non_blocking=True)
-        targets = targets.to(device, non_blocking=True)
+    
+    with torch.autograd.profiler.profile(use_cuda=True) as prof:
+        for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+            samples = samples.to(device, non_blocking=True)
+            targets = targets.to(device, non_blocking=True)
 
-        if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)
+            if mixup_fn is not None:
+                samples, targets = mixup_fn(samples, targets)
 
-        with torch.cuda.amp.autocast():
+            
             outputs = model(samples)
             loss = criterion(samples, outputs, targets)
+            loss_value = loss.item()
 
-        loss_value = loss.item()
+            if not math.isfinite(loss_value):
+                logger.info("Loss is {}, stopping training".format(loss_value))
+                sys.exit(1)
 
-        if not math.isfinite(loss_value):
-            logger.info("Loss is {}, stopping training".format(loss_value))
-            sys.exit(1)
+            optimizer.zero_grad()
+            # this attribute is added by timm on one optimizer (adahessian)
+            is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+            with apex.amp.scale_loss(loss, optimizer) as scaled_loss:
+                scaled_loss.backward(create_graph=is_second_order)
+            optimizer.step()
 
-        optimizer.zero_grad()
+            #torch.nn.utils.clip_grad_norm_(apex.amp.master_params(optimizer), max_norm)
+            torch.cuda.synchronize()
+            if model_ema is not None:
+                model_ema.update(model)
 
-        # this attribute is added by timm on one optimizer (adahessian)
-        is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-        loss_scaler(loss, optimizer, clip_grad=max_norm,
-                    parameters=model.parameters(), create_graph=is_second_order)
+            metric_logger.update(loss=loss_value)
+            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
-        torch.cuda.synchronize()
-        if model_ema is not None:
-            model_ema.update(model)
-
-        metric_logger.update(loss=loss_value)
-        metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+    print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+    prof.export_chrome_trace(os.path.join(output_dir,"output.prof"))
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     logger.info(f"Averaged stats: {metric_logger}")
@@ -80,9 +86,9 @@ def evaluate(data_loader, model, device, logger=logging):
         target = target.to(device, non_blocking=True)
 
         # compute output
-        with torch.cuda.amp.autocast():
-            output = model(images)
-            loss = criterion(output, target)
+        
+        output = model(images)
+        loss = criterion(output, target)
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
 

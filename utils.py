@@ -159,6 +159,8 @@ class MetricLogger(object):
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         self.logger.info('{} Total time: {} ({:.4f} s / it)'.format(
             header, total_time_str, total_time / len(iterable)))
+        self.logger.info('{} FPS: {} ({:.4f} s / it)'.format(
+            header, args.batch_size * get_world_size() / total_time, total_time / len(iterable)))
 
 
 def _load_checkpoint_for_ema(model_ema, checkpoint):

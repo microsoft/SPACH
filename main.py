@@ -26,6 +26,8 @@ import models
 import utils
 from logger import create_logger
 
+import apex.amp
+
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Training and evaluation script', add_help=False)
@@ -321,9 +323,14 @@ def main(args):
             resume='')
 
     model_without_ddp = model
+    linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
+    args.lr = linear_scaled_lr
+    optimizer = create_optimizer(args, model_without_ddp)
+    model , optimizer = apex.amp.initialize(model, optimizer, opt_level="O2", loss_scale=128.0)
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
         model_without_ddp = model.module
+        
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f'number of params: {n_parameters}')
     if hasattr(model_without_ddp, 'flops'):
@@ -332,14 +339,9 @@ def main(args):
             logger.info(f"number of GFLOPs: {flops / 1e9}")
         except Exception as e:
             logger.exception(e)
-
-    linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
-    args.lr = linear_scaled_lr
-    optimizer = create_optimizer(args, model_without_ddp)
-    loss_scaler = NativeScaler()
+    
 
     lr_scheduler, _ = create_scheduler(args, optimizer)
-
     criterion = LabelSmoothingCrossEntropy()
 
     if args.mixup > 0.:
@@ -395,8 +397,6 @@ def main(args):
             args.start_epoch = checkpoint['epoch'] + 1
             if args.model_ema:
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
-            if 'scaler' in checkpoint:
-                loss_scaler.load_state_dict(checkpoint['scaler'])
 
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device, logger=logger)
@@ -416,7 +416,7 @@ def main(args):
 
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
-            optimizer, device, epoch, loss_scaler,
+            optimizer, device, epoch, args.output_dir,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
             logger=logger
@@ -432,7 +432,6 @@ def main(args):
                     'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
                     'model_ema': get_state_dict(model_ema),
-                    'scaler': loss_scaler.state_dict(),
                     'args': args,
                 }, checkpoint_path)
 
@@ -447,7 +446,6 @@ def main(args):
                 'lr_scheduler': lr_scheduler.state_dict(),
                 'epoch': epoch,
                 'model_ema': get_state_dict(model_ema),
-                'scaler': loss_scaler.state_dict(),
                 'args': args,
             }, best_checkpoint_path)
         max_accuracy = max(max_accuracy, test_stats["acc1"])
