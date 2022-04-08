@@ -34,13 +34,16 @@ class SmoothedValue(object):
         self.count += n
         self.total += value * n
 
-    def synchronize_between_processes(self):
+    def synchronize_between_processes(self, use_npu=False):
         """
         Warning: does not synchronize the deque!
         """
         if not is_dist_avail_and_initialized():
             return
-        t = torch.tensor([self.count, self.total], dtype=torch.float64, device='cuda')
+        if use_npu:
+            t = torch.tensor([self.count, self.total], dtype=torch.float64).npu()
+        else:
+            t = torch.tensor([self.count, self.total], dtype=torch.float64, device='cuda')
         dist.barrier()
         dist.all_reduce(t)
         t = t.tolist()
@@ -107,14 +110,14 @@ class MetricLogger(object):
             )
         return self.delimiter.join(loss_str)
 
-    def synchronize_between_processes(self):
+    def synchronize_between_processes(self, use_npu=False):
         for meter in self.meters.values():
-            meter.synchronize_between_processes()
+            meter.synchronize_between_processes(use_npu=use_npu)
 
     def add_meter(self, name, meter):
         self.meters[name] = meter
 
-    def log_every(self, iterable, print_freq, header=None):
+    def log_every(self, iterable, print_freq, header=None, use_npu=False):
         i = 0
         if not header:
             header = ''
@@ -131,8 +134,12 @@ class MetricLogger(object):
             'time: {time}',
             'data: {data}'
         ]
-        if torch.cuda.is_available():
-            log_msg.append('max mem: {memory:.0f}')
+        if use_npu:
+            if torch.npu.is_available():
+                log_msg.append('max mem: {memory:.0f}')
+        else:
+            if torch.cuda.is_available():
+                log_msg.append('max mem: {memory:.0f}')
         log_msg = self.delimiter.join(log_msg)
         MB = 1024.0 * 1024.0
         for obj in iterable:
@@ -142,17 +149,30 @@ class MetricLogger(object):
             if i % print_freq == 0 or i == len(iterable) - 1:
                 eta_seconds = iter_time.global_avg * (len(iterable) - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-                if torch.cuda.is_available():
-                    self.logger.info(log_msg.format(
-                        i, len(iterable), eta=eta_string,
-                        meters=str(self),
-                        time=str(iter_time), data=str(data_time),
-                        memory=torch.cuda.max_memory_allocated() / MB))
+                if use_npu:
+                    if torch.npu.is_available():
+                        self.logger.info(log_msg.format(
+                            i, len(iterable), eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time),
+                            memory=torch.npu.max_memory_allocated() / MB))
+                    else:
+                        self.logger.info(log_msg.format(
+                            i, len(iterable), eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time)))
                 else:
-                    self.logger.info(log_msg.format(
-                        i, len(iterable), eta=eta_string,
-                        meters=str(self),
-                        time=str(iter_time), data=str(data_time)))
+                    if torch.cuda.is_available():
+                        self.logger.info(log_msg.format(
+                            i, len(iterable), eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time),
+                            memory=torch.cuda.max_memory_allocated() / MB))
+                    else:
+                        self.logger.info(log_msg.format(
+                            i, len(iterable), eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time), data=str(data_time)))
             i += 1
             end = time.time()
         total_time = time.time() - start_time
@@ -237,12 +257,20 @@ def init_distributed_mode(args):
         return
 
     args.distributed = True
-
-    torch.cuda.set_device(args.gpu)
-    args.dist_backend = 'nccl'
-    print('| distributed init (rank {}): {}'.format(
+    
+    if args.npu:
+        torch.npu.set_device(args.gpu)
+        args.dist_backend = 'hccl'
+        print('| distributed init (rank {}): {}'.format(
         args.rank, args.dist_url), flush=True)
-    torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+        torch.distributed.init_process_group(backend=args.dist_backend, #init_method=args.dist_url,
                                          world_size=args.world_size, rank=args.rank)
+    else:
+        torch.cuda.set_device(args.gpu)
+        args.dist_backend = 'nccl'
+        print('| distributed init (rank {}): {}'.format(
+            args.rank, args.dist_url), flush=True)
+        torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+                                            world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)

@@ -179,6 +179,9 @@ def get_args_parser():
     parser.add_argument('--stem-type', default='conv1', type=str, choices=['conv1', 'conv4'])
     parser.add_argument('--shared-spatial-func', action='store_true')
 
+    # npu parameters
+    parser.add_argument('--npu', action='store_true', default=False, help='Enabling npu training')
+
     # parameters for benchmark
     parser.add_argument('--throughput', action='store_true')
     return parser
@@ -399,12 +402,12 @@ def main(args):
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
 
     if args.eval:
-        test_stats = evaluate(data_loader_val, model, device, logger=logger)
+        test_stats = evaluate(data_loader_val, model, device, logger=logger, use_npu=args.npu)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
 
     if args.throughput:
-        throughput(data_loader_val, model, logger=logger)
+        throughput(data_loader_val, model, logger=logger, use_npu=args.npu)
         return
 
     logger.info(f"Start training for {args.epochs} epochs")
@@ -419,7 +422,8 @@ def main(args):
             optimizer, device, epoch, args.output_dir,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
-            logger=logger
+            logger=logger,
+            use_npu=args.npu
         )
 
         lr_scheduler.step(epoch)
@@ -435,7 +439,7 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device, logger=logger)
+        test_stats = evaluate(data_loader_val, model, device, logger=logger, use_npu=args.npu)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
 
         if test_stats["acc1"] > max_accuracy:

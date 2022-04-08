@@ -23,7 +23,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, output_dir: str, max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
-                    set_training_mode=True, logger=logging):
+                    set_training_mode=True, logger=logging, use_npu=False):
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ", logger=logger)
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -32,7 +32,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
     
     with torch.autograd.profiler.profile(use_cuda=True) as prof:
-        for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+        for samples, targets in metric_logger.log_every(data_loader, print_freq, header, use_npu=use_npu):
             samples = samples.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
@@ -56,7 +56,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             optimizer.step()
 
             #torch.nn.utils.clip_grad_norm_(apex.amp.master_params(optimizer), max_norm)
-            torch.cuda.synchronize()
+            if use_npu:
+                torch.npu.synchronize()
+            else:
+                torch.cuda.synchronize()
             if model_ema is not None:
                 model_ema.update(model)
 
@@ -66,13 +69,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     print(prof.key_averages().table(sort_by="self_cpu_time_total"))
     prof.export_chrome_trace(os.path.join(output_dir,"output.prof"))
     # gather the stats from all processes
-    metric_logger.synchronize_between_processes()
+    metric_logger.synchronize_between_processes(use_npu=use_npu)
     logger.info(f"Averaged stats: {metric_logger}")
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, logger=logging):
+def evaluate(data_loader, model, device, logger=logging, use_npu=False):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -81,7 +84,7 @@ def evaluate(data_loader, model, device, logger=logging):
     # switch to evaluation mode
     model.eval()
 
-    for images, target in metric_logger.log_every(data_loader, 10, header):
+    for images, target in metric_logger.log_every(data_loader, 10, header, use_npu=use_npu):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
@@ -97,7 +100,7 @@ def evaluate(data_loader, model, device, logger=logging):
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
     # gather the stats from all processes
-    metric_logger.synchronize_between_processes()
+    metric_logger.synchronize_between_processes(use_npu=use_npu)
     logger.info('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
                 .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
@@ -105,20 +108,35 @@ def evaluate(data_loader, model, device, logger=logging):
 
 
 @torch.no_grad()
-def throughput(data_loader, model, logger=logging):
+def throughput(data_loader, model, logger=logging, use_npu=False):
     model.eval()
-
-    for idx, (images, _) in enumerate(data_loader):
-        images = images.cuda(non_blocking=True)
-        batch_size = images.shape[0]
-        for i in range(50):
-            model(images)
-        torch.cuda.synchronize()
-        logger.info(f"throughput averaged with 30 times")
-        tic1 = time.time()
-        for i in range(30):
-            model(images)
-        torch.cuda.synchronize()
-        tic2 = time.time()
-        logger.info(f"batch_size {batch_size} throughput {30 * batch_size / (tic2 - tic1)}")
-        return
+    if use_npu:
+        for idx, (images, _) in enumerate(data_loader):
+            images = images.npu(non_blocking=True)
+            batch_size = images.shape[0]
+            for i in range(50):
+                model(images)
+            torch.npu.synchronize()
+            logger.info(f"throughput averaged with 30 times")
+            tic1 = time.time()
+            for i in range(30):
+                model(images)
+            torch.npu.synchronize()
+            tic2 = time.time()
+            logger.info(f"batch_size {batch_size} throughput {30 * batch_size / (tic2 - tic1)}")
+            return
+    else:
+        for idx, (images, _) in enumerate(data_loader):
+            images = images.cuda(non_blocking=True)
+            batch_size = images.shape[0]
+            for i in range(50):
+                model(images)
+            torch.cuda.synchronize()
+            logger.info(f"throughput averaged with 30 times")
+            tic1 = time.time()
+            for i in range(30):
+                model(images)
+            torch.cuda.synchronize()
+            tic2 = time.time()
+            logger.info(f"batch_size {batch_size} throughput {30 * batch_size / (tic2 - tic1)}")
+            return
