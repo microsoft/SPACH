@@ -11,7 +11,7 @@ import os
 
 from pathlib import Path
 
-from timm.data import Mixup
+from mixup_nova import Mixup_nova as Mixup
 from timm.models import create_model
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
@@ -206,8 +206,10 @@ def main(args):
     if args.distillation_type != 'none' and args.finetune and not args.eval:
         raise NotImplementedError("Finetuning with distillation not yet supported")
 
-    device = torch.device(args.device)
-
+    if args.npu:
+        device = torch.device('npu')
+    else:
+        device = torch.device(args.device)
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
@@ -262,10 +264,10 @@ def main(args):
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
     if mixup_active:
-        mixup_fn = Mixup(
-            mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
-            prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
-            label_smoothing=args.smoothing, num_classes=args.nb_classes)
+            mixup_fn = Mixup(
+                mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
+                prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
+                label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     logger.info(f"Creating model: {args.model}")
     model = create_model(
@@ -328,10 +330,11 @@ def main(args):
     model_without_ddp = model
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
-    optimizer = create_optimizer(args, model_without_ddp)
-    model , optimizer = apex.amp.initialize(model, optimizer, opt_level="O2", loss_scale=128.0)
+    optimizer = apex.optimizers.NpuFusedAdamW(model_without_ddp.parameters(), args.lr,
+                          weight_decay=args.weight_decay)
+    model , optimizer = apex.amp.initialize(model, optimizer, opt_level="O2", loss_scale=128.0, combine_grad=True)
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False, broadcast_buffers=False)
         model_without_ddp = model.module
         
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -400,9 +403,9 @@ def main(args):
             args.start_epoch = checkpoint['epoch'] + 1
             if args.model_ema:
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
-
+ 
     if args.eval:
-        test_stats = evaluate(data_loader_val, model, device, logger=logger, use_npu=args.npu)
+        test_stats = evaluate(data_loader_val, model, device, args.batch_size, logger=logger, use_npu=args.npu)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
 
@@ -419,7 +422,7 @@ def main(args):
 
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
-            optimizer, device, epoch, args.output_dir,
+            optimizer, device, epoch, args.output_dir, args.batch_size,
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
             logger=logger,
@@ -439,7 +442,7 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device, logger=logger, use_npu=args.npu)
+        test_stats = evaluate(data_loader_val, model, device, args.batch_size, logger=logger, use_npu=args.npu)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
 
         if test_stats["acc1"] > max_accuracy:

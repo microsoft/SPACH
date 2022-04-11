@@ -41,7 +41,7 @@ class SmoothedValue(object):
         if not is_dist_avail_and_initialized():
             return
         if use_npu:
-            t = torch.tensor([self.count, self.total], dtype=torch.float64).npu()
+            t = torch.tensor([self.count, self.total], dtype=torch.float64, device='npu')
         else:
             t = torch.tensor([self.count, self.total], dtype=torch.float64, device='cuda')
         dist.barrier()
@@ -117,11 +117,12 @@ class MetricLogger(object):
     def add_meter(self, name, meter):
         self.meters[name] = meter
 
-    def log_every(self, iterable, print_freq, header=None, use_npu=False):
+    def log_every(self, iterable, print_freq, batch_size, header=None, use_npu=False):
         i = 0
         if not header:
             header = ''
         start_time = time.time()
+        skip_pre_time = time.time()
         end = time.time()
         iter_time = SmoothedValue(fmt='{avg:.4f}')
         data_time = SmoothedValue(fmt='{avg:.4f}')
@@ -142,7 +143,9 @@ class MetricLogger(object):
                 log_msg.append('max mem: {memory:.0f}')
         log_msg = self.delimiter.join(log_msg)
         MB = 1024.0 * 1024.0
-        for obj in iterable:
+        for i, obj in enumerate(iterable):
+            if i == 3:
+                skip_pre_time = time.time()
             data_time.update(time.time() - end)
             yield obj
             iter_time.update(time.time() - end)
@@ -176,11 +179,12 @@ class MetricLogger(object):
             i += 1
             end = time.time()
         total_time = time.time() - start_time
+        FPS_valid_time = time.time() - skip_pre_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         self.logger.info('{} Total time: {} ({:.4f} s / it)'.format(
             header, total_time_str, total_time / len(iterable)))
         self.logger.info('{} FPS: {} ({:.4f} s / it)'.format(
-            header, args.batch_size * get_world_size() / total_time, total_time / len(iterable)))
+            header, batch_size * get_world_size() / FPS_valid_time, FPS_valid_time / len(iterable)))
 
 
 def _load_checkpoint_for_ema(model_ema, checkpoint):
@@ -238,13 +242,20 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
+    if args.npu:
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        os.environ['MASTER_PORT'] = '29688'
+
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
         args.gpu = int(os.environ['LOCAL_RANK'])
     elif 'SLURM_PROCID' in os.environ:
         args.rank = int(os.environ['SLURM_PROCID'])
-        args.gpu = args.rank % torch.cuda.device_count()
+        if args.npu:
+            args.gpu = args.rank % torch.npu.device_count()
+        else:
+            args.gpu = args.rank % torch.cuda.device_count()
     elif 'OMPI_COMM_WORLD_SIZE' in os.environ and 'OMPI_COMM_WORLD_RANK' in os.environ:
         args.world_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
         args.rank = int(os.environ['OMPI_COMM_WORLD_RANK'])

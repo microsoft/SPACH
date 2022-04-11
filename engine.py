@@ -21,7 +21,8 @@ import apex.amp
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, output_dir: str, max_norm: float = 0,
+                    device: torch.device, epoch: int, output_dir: str, batch_size: int,
+                    max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     set_training_mode=True, logger=logging, use_npu=False):
     model.train(set_training_mode)
@@ -31,43 +32,44 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     print_freq = 10
 
     
-    with torch.autograd.profiler.profile(use_cuda=True) as prof:
-        for samples, targets in metric_logger.log_every(data_loader, print_freq, header, use_npu=use_npu):
-            samples = samples.to(device, non_blocking=True)
-            targets = targets.to(device, non_blocking=True)
+    
+    for samples, targets in metric_logger.log_every(data_loader, print_freq, batch_size, header, use_npu=use_npu):
+        #with torch.autograd.profiler.profile(use_cuda=not use_npu, use_npu=use_npu) as prof:
+        samples = samples.to(device, non_blocking=True)
+        targets = targets.to(device, non_blocking=True)
 
-            if mixup_fn is not None:
-                samples, targets = mixup_fn(samples, targets)
+        if mixup_fn is not None:
+            samples, targets = mixup_fn(samples, targets)
 
-            
-            outputs = model(samples)
-            loss = criterion(samples, outputs, targets)
-            loss_value = loss.item()
+        
+        outputs = model(samples)
+        loss = criterion(samples, outputs, targets)
+        loss_value = loss.item()
 
-            if not math.isfinite(loss_value):
-                logger.info("Loss is {}, stopping training".format(loss_value))
-                sys.exit(1)
+        if not math.isfinite(loss_value):
+            logger.info("Loss is {}, stopping training".format(loss_value))
+            sys.exit(1)
 
-            optimizer.zero_grad()
-            # this attribute is added by timm on one optimizer (adahessian)
-            is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-            with apex.amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward(create_graph=is_second_order)
-            optimizer.step()
+        optimizer.zero_grad()
+        # this attribute is added by timm on one optimizer (adahessian)
+        is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+        with apex.amp.scale_loss(loss, optimizer) as scaled_loss:
+            scaled_loss.backward(create_graph=is_second_order)
+        optimizer.step()
 
-            #torch.nn.utils.clip_grad_norm_(apex.amp.master_params(optimizer), max_norm)
-            if use_npu:
-                torch.npu.synchronize()
-            else:
-                torch.cuda.synchronize()
-            if model_ema is not None:
-                model_ema.update(model)
+        #torch.nn.utils.clip_grad_norm_(apex.amp.master_params(optimizer), max_norm)
+        if use_npu:
+            torch.npu.synchronize()
+        else:
+            torch.cuda.synchronize()
+        if model_ema is not None:
+            model_ema.update(model)
 
-            metric_logger.update(loss=loss_value)
-            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+        metric_logger.update(loss=loss_value)
+        metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+        #print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+        #prof.export_chrome_trace(os.path.join(output_dir,"output.prof"))
 
-    print(prof.key_averages().table(sort_by="self_cpu_time_total"))
-    prof.export_chrome_trace(os.path.join(output_dir,"output.prof"))
     # gather the stats from all processes
     metric_logger.synchronize_between_processes(use_npu=use_npu)
     logger.info(f"Averaged stats: {metric_logger}")
@@ -75,7 +77,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, logger=logging, use_npu=False):
+def evaluate(data_loader, model, device, batch_size, logger=logging, use_npu=False):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -84,7 +86,7 @@ def evaluate(data_loader, model, device, logger=logging, use_npu=False):
     # switch to evaluation mode
     model.eval()
 
-    for images, target in metric_logger.log_every(data_loader, 10, header, use_npu=use_npu):
+    for images, target in metric_logger.log_every(data_loader, 10, batch_size, header, use_npu=use_npu):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
