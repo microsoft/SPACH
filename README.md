@@ -8,7 +8,8 @@ Other unofficial implementations:
 
 + ShiftViT
   + [Keras](https://keras.io/examples/vision/shiftvit/) by [Aritra Roy Gosthipaty](https://twitter.com/ariG23498) and [Ritwik Raha](https://twitter.com/ritwik_raha)
-
++ SPACH
+  + [PyTorch with NPU](https://github.com/Leoooo333/SPACH-1) by [Junming Chen](https://github.com/Leoooo333)
 # Main Results on ImageNet with Pretrained Models
 
 
