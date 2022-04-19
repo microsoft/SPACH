@@ -34,18 +34,18 @@ class SmoothedValue(object):
         self.count += n
         self.total += value * n
 
-    def synchronize_between_processes(self, use_npu=False):
+    def synchronize_between_processes(self, use_npu=False, device='cuda'):
         """
         Warning: does not synchronize the deque!
         """
         if not is_dist_avail_and_initialized():
             return
         if use_npu:
-            t = torch.tensor([self.count, self.total], dtype=torch.float64, device='npu')
+            t = torch.tensor([self.count, self.total], dtype=torch.float64, device=device)
         else:
-            t = torch.tensor([self.count, self.total], dtype=torch.float64, device='cuda')
+            t = torch.tensor([self.count, self.total], dtype=torch.float64, device=device)
         dist.barrier()
-        dist.all_reduce(t)
+        #dist.all_reduce(t)
         t = t.tolist()
         self.count = int(t[0])
         self.total = t[1]
@@ -110,9 +110,9 @@ class MetricLogger(object):
             )
         return self.delimiter.join(loss_str)
 
-    def synchronize_between_processes(self, use_npu=False):
+    def synchronize_between_processes(self, use_npu=False, device='cuda'):
         for meter in self.meters.values():
-            meter.synchronize_between_processes(use_npu=use_npu)
+            meter.synchronize_between_processes(use_npu=use_npu, device=device)
 
     def add_meter(self, name, meter):
         self.meters[name] = meter
@@ -184,7 +184,7 @@ class MetricLogger(object):
         self.logger.info('{} Total time: {} ({:.4f} s / it)'.format(
             header, total_time_str, total_time / len(iterable)))
         self.logger.info('{} FPS: {} ({:.4f} s / it)'.format(
-            header, batch_size * get_world_size() / FPS_valid_time, FPS_valid_time / len(iterable)))
+            header, len(iterable) * batch_size * get_world_size() / FPS_valid_time, FPS_valid_time / len(iterable)))
 
 
 def _load_checkpoint_for_ema(model_ema, checkpoint):
@@ -242,9 +242,6 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
-    if args.npu:
-        os.environ['MASTER_ADDR'] = '127.0.0.1'
-        os.environ['MASTER_PORT'] = '29688'
 
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
@@ -270,12 +267,11 @@ def init_distributed_mode(args):
     args.distributed = True
     
     if args.npu:
-        torch.npu.set_device(args.gpu)
-        args.dist_backend = 'hccl'
-        print('| distributed init (rank {}): {}'.format(
-        args.rank, args.dist_url), flush=True)
-        torch.distributed.init_process_group(backend=args.dist_backend, #init_method=args.dist_url,
+        torch.distributed.init_process_group(backend='hccl', #init_method=args.dist_url,
                                          world_size=args.world_size, rank=args.rank)
+        loc = 'npu:{}'.format(args.gpu)
+        torch.npu.set_device(loc)  
+        print('| distributed init (rank {}): {}'.format(args.rank, args.dist_url), flush=True)
     else:
         torch.cuda.set_device(args.gpu)
         args.dist_backend = 'nccl'
@@ -284,4 +280,4 @@ def init_distributed_mode(args):
         torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                             world_size=args.world_size, rank=args.rank)
     torch.distributed.barrier()
-    setup_for_distributed(args.rank == 0)
+    #setup_for_distributed(args.rank == 0)

@@ -169,6 +169,7 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+    parser.add_argument("--local_rank", type=int, default=0)
 
     # parameters for training on preemptible clusters
     parser.add_argument('--auto-resume', action='store_true')
@@ -207,7 +208,7 @@ def main(args):
         raise NotImplementedError("Finetuning with distillation not yet supported")
 
     if args.npu:
-        device = torch.device('npu')
+        device = f'npu:{str(utils.get_rank())}'
     else:
         device = torch.device(args.device)
     # fix the seed for reproducibility
@@ -221,7 +222,7 @@ def main(args):
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
-    if True:  # args.distributed:
+    if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
         if args.repeated_aug:
@@ -315,7 +316,7 @@ def main(args):
         checkpoint_model['pos_embed'] = new_pos_embed
 
         model.load_state_dict(checkpoint_model, strict=False)
-
+    print(device, flush=True)
     model.to(device)
 
     model_ema = None
@@ -326,15 +327,16 @@ def main(args):
             decay=args.model_ema_decay,
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')
-
+            
     model_without_ddp = model
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
-    optimizer = apex.optimizers.NpuFusedAdamW(model_without_ddp.parameters(), args.lr,
+    optimizer = apex.optimizers.NpuFusedAdamW(model.parameters(), args.lr,
                           weight_decay=args.weight_decay)
-    model , optimizer = apex.amp.initialize(model, optimizer, opt_level="O2", loss_scale=128.0, combine_grad=True)
+    lr_scheduler, _ = create_scheduler(args, optimizer)
+    model, optimizer = apex.amp.initialize(model, optimizer, opt_level="O2", loss_scale=128.0, combine_grad=True)
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=False, broadcast_buffers=False)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], broadcast_buffers=False)
         model_without_ddp = model.module
         
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -346,8 +348,6 @@ def main(args):
         except Exception as e:
             logger.exception(e)
     
-
-    lr_scheduler, _ = create_scheduler(args, optimizer)
     criterion = LabelSmoothingCrossEntropy()
 
     if args.mixup > 0.:
@@ -357,7 +357,6 @@ def main(args):
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
         criterion = torch.nn.CrossEntropyLoss()
-
     teacher_model = None
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
@@ -412,7 +411,7 @@ def main(args):
     if args.throughput:
         throughput(data_loader_val, model, logger=logger, use_npu=args.npu)
         return
-
+    criterion = criterion.to(device)
     logger.info(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
@@ -430,8 +429,8 @@ def main(args):
         )
 
         lr_scheduler.step(epoch)
-        if args.output_dir:
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
+        if args.output_dir and epoch % 5==0:
+            checkpoint_paths = [output_dir / f'checkpoint_{str(epoch)}.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
@@ -439,9 +438,10 @@ def main(args):
                     'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
                     'model_ema': get_state_dict(model_ema),
+                    'amp': apex.amp.state_dict(),
                     'args': args,
                 }, checkpoint_path)
-
+        
         test_stats = evaluate(data_loader_val, model, device, args.batch_size, logger=logger, use_npu=args.npu)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
 
@@ -453,19 +453,21 @@ def main(args):
                 'lr_scheduler': lr_scheduler.state_dict(),
                 'epoch': epoch,
                 'model_ema': get_state_dict(model_ema),
+                'amp': apex.amp.state_dict(),
                 'args': args,
             }, best_checkpoint_path)
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         logger.info(f'Max accuracy: {max_accuracy:.2f}%')
-
+        
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
-
+        
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+        
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

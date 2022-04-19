@@ -1,3 +1,6 @@
+>This repo is a **Ascend NPU** implement forkd from [SPACH](https://github.com/microsoft/SPACH).  
+>To learn more about Ascend NPU, [click here](https://gitee.com/ascend/modelzoo).
+
 This repository contains Pytorch evaluation code, training code and pretrained models for the following projects:
 
 + SPACH ([A Battle of Network Structures: An Empirical Study of CNN, Transformer, and MLP](https://arxiv.org/abs/2108.13002))
@@ -29,12 +32,33 @@ Other unofficial implementations:
 
 # Usage
 
+## NPU
+NPU means neural-network processing units. 
+
+To enable NPU, use parser argument
+>**--npu**
+
 ## Install
 First, clone the repo and install requirements:
 
 ```bash
 git clone https://github.com/microsoft/Spach
-pip install -r requirements.txt
+```
+
++ install requirement
+```
+pip3 install torchvision==0.6.0
+pip3 install einops==0.4.1
+pip3 install --no-deps timm==0.4.5
+
+# other recommended requirements
+apex==0.1+ascend.20220315
+torch==1.5.0+ascend.post5.20220315
+```
+- source env and build：
+
+```
+source ./test/env_npu.sh
 ```
 
 ## Data preparation
@@ -57,37 +81,34 @@ and the training and validation data is expected to be in the `train/` folder an
       img4.jpeg
 ```
 
-## Evaluation
-
-To evaluate a pre-trained model on ImageNet val with a single GPU run:
-
-```bash
-python main.py --eval --resume <checkpoint> --model <model-name>--data-path <imagenet-path> 
-```
-
-For example, to evaluate the SPACH-Hybrid-MS-S model, run
-
-```bash
-python main.py --eval --resume --model spach_ms_s_patch4_224_hybrid spach_ms_hybrid_s.pth --data-path <imagenet-path>
-```
-
-giving
-```bash
-* Acc@1 83.658 Acc@5 96.762 loss 0.688
-```
-
-You can find all supported models in `models/registry.py.`
-
-## Training
+## Training & Evaluation
 
 One can simply call the following script to run training process. Distributed training is recommended even on single GPU node. 
 
+To train a model on NPU, run `main.py` with the desired model architecture and the path to the ImageNet dataset:
+
+
 ```bash
-python -m torch.distributed.launch --nproc_per_node <num-of-gpus-to-use> --use_env main.py \
---model <model-name>
---data-path <imagenet-path>
---output_dir <output-path>
---dist-eval
+# training 1p accuracy
+bash ./test/train_full_1p.sh --model=model_name \
+--data_path=real_data_path
+
+# training 1p performance
+bash ./test/train_performance_1p.sh --model=model_name \
+--data_path=real_data_path
+
+# training 8p accuracy
+bash ./test/train_full_8p.sh --model=model_name \
+--data_path=real_data_path
+
+# training 8p performance
+bash ./test/train_performance_8p.sh --model=model_name \
+--data_path=real_data_path
+
+#evaluate 8p accuracy
+bash ./test/train_eval_8p.sh --model=model_name \
+--data_path=real_data_path \
+--resume=checkpoint_path
 ```
 
 # Citation

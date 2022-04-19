@@ -21,7 +21,7 @@ import apex.amp
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, output_dir: str, batch_size: int,
+                    device, epoch: int, output_dir: str, batch_size: int,
                     max_norm: float = 0,
                     model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     set_training_mode=True, logger=logging, use_npu=False):
@@ -30,18 +30,13 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
-
-    
     
     for samples, targets in metric_logger.log_every(data_loader, print_freq, batch_size, header, use_npu=use_npu):
         #with torch.autograd.profiler.profile(use_cuda=not use_npu, use_npu=use_npu) as prof:
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
-
-        
         outputs = model(samples)
         loss = criterion(samples, outputs, targets)
         loss_value = loss.item()
@@ -58,12 +53,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         optimizer.step()
 
         #torch.nn.utils.clip_grad_norm_(apex.amp.master_params(optimizer), max_norm)
-        if use_npu:
-            torch.npu.synchronize()
-        else:
-            torch.cuda.synchronize()
-        if model_ema is not None:
-            model_ema.update(model)
+        #if use_npu:
+        #    torch.npu.synchronize()
+        #else:
+        #    torch.cuda.synchronize()
+        #if model_ema is not None:
+        #    model_ema.update(model)
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
@@ -71,7 +66,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         #prof.export_chrome_trace(os.path.join(output_dir,"output.prof"))
 
     # gather the stats from all processes
-    metric_logger.synchronize_between_processes(use_npu=use_npu)
+    metric_logger.synchronize_between_processes(use_npu=use_npu, device=device)
     logger.info(f"Averaged stats: {metric_logger}")
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
@@ -102,7 +97,7 @@ def evaluate(data_loader, model, device, batch_size, logger=logging, use_npu=Fal
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
     # gather the stats from all processes
-    metric_logger.synchronize_between_processes(use_npu=use_npu)
+    metric_logger.synchronize_between_processes(use_npu=use_npu, device=device)
     logger.info('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
                 .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
@@ -118,12 +113,12 @@ def throughput(data_loader, model, logger=logging, use_npu=False):
             batch_size = images.shape[0]
             for i in range(50):
                 model(images)
-            torch.npu.synchronize()
+            #torch.npu.synchronize()
             logger.info(f"throughput averaged with 30 times")
             tic1 = time.time()
             for i in range(30):
                 model(images)
-            torch.npu.synchronize()
+            #torch.npu.synchronize()
             tic2 = time.time()
             logger.info(f"batch_size {batch_size} throughput {30 * batch_size / (tic2 - tic1)}")
             return
@@ -133,12 +128,12 @@ def throughput(data_loader, model, logger=logging, use_npu=False):
             batch_size = images.shape[0]
             for i in range(50):
                 model(images)
-            torch.cuda.synchronize()
+            #torch.cuda.synchronize()
             logger.info(f"throughput averaged with 30 times")
             tic1 = time.time()
             for i in range(30):
                 model(images)
-            torch.cuda.synchronize()
+            #torch.cuda.synchronize()
             tic2 = time.time()
             logger.info(f"batch_size {batch_size} throughput {30 * batch_size / (tic2 - tic1)}")
             return
