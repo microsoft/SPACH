@@ -15,6 +15,9 @@ Other unofficial implementations:
 
 | name               | acc@1 | #params | FLOPs | url                                                          |
 | ------------------ | ----- | ------- | ----- | ------------------------------------------------------------ |
+| SPACH-Conv-MS-XXS  | 73.1  | 5M      | 0.7G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_conv_xxs.pth) |
+| SPACH-Trans-MS-XXS | 65.4  | 2M      | 0.5G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_trans_xxs.pth) |
+| SPACH-MLP-MS-XXS   | 74.5  | 6M      | 0.9G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_mlp_xxs.pth) |
 | SPACH-Conv-MS-S    | 81.6  | 44M     | 7.2G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_conv_s.pth) |
 | SPACH-Trans-MS-S   | 82.9  | 40M     | 7.6G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_trans_s.pth) |
 | SPACH-MLP-MS-S     | 82.1  | 46M     | 8.2G  | [github](https://github.com/microsoft/SPACH/releases/download/v1.0/spach_ms_mlp_s.pth) |
